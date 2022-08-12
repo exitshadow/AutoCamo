@@ -11,14 +11,15 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private bool debug;
 
     private RenderTexture generalRender;
-    private Texture2D generalRenderTex;
     private RenderTexture targetRender;
+    private Texture2D generalRenderTex;
     private Texture2D targetRenderTex;
     private Vector3 viewTargetPos;
 
     private void Start()
     {
         generalRender = generalView.targetTexture;
+        targetRender = targetedView.targetTexture;
     }
 
     private void Update()
@@ -31,14 +32,54 @@ public class EnnemyVision : MonoBehaviour
         }
     }
 
-    private void ReadVision()
+    private void CalculateTargetBounds( int bound,
+                                        int boundmargin,
+                                        out Vector2 origin,
+                                        out Vector2 destination)
     {
-        generalRenderTex = new Texture2D(  generalRender.width,
-                                            generalRender.height,
+        float minX = viewTargetPos.x - bound - boundmargin;
+        float minY = viewTargetPos.y - bound - boundmargin;
+        if (minX < 0) minX = 0;
+        if (minY < 0) minY = 0;
+        origin = new Vector2(minX, minY);
+
+        float maxX = viewTargetPos.x + bound + boundmargin;
+        float maxY = viewTargetPos.y + bound + boundmargin;
+        if (maxX > 1) maxX = 1;
+        if (maxY > 1) maxY = 1;
+        destination = new Vector2(maxX, maxY);
+    }
+
+    private void ReadVision(Vector2 from, Vector2 to)
+    {
+        int boundBoxWidth = (int)(to.x - from.x) * generalRender.width;
+        int boundBoxHeight = (int)(to.y - from.y) * generalRender.height;
+
+        int originX = (int)(from.x * generalRender.width);
+        int originY = (int)(from.y * generalRender.height);
+
+        int destX = (int)(to.x * generalRender.width);
+        int destY = (int)(to.y * generalRender.height);
+
+        generalRenderTex = new Texture2D(   boundBoxWidth,
+                                            boundBoxHeight,
                                             TextureFormat.RGB24,
                                             true);
+        
+        targetRenderTex = new Texture2D(    boundBoxWidth,
+                                            boundBoxHeight,
+                                            TextureFormat.RGB24,
+                                            true);
+        
+        Rect cropSource = new Rect (originX, originY, destX, destY);
 
-        generalRenderTex.ReadPixels(new Rect (0,0, generalRender.width, generalRender.height), 0, 0);
+        Graphics.SetRenderTarget(generalRender);
+        generalRenderTex.ReadPixels(cropSource, 0, 0);
+
+        Graphics.SetRenderTarget(targetRender);
+        targetRenderTex.ReadPixels(cropSource, 0, 0);
+        
+    }
 
         // TODO
         // alternatively, as we do have the target position, we can draw a rectangle around
@@ -63,14 +104,13 @@ public class EnnemyVision : MonoBehaviour
         // levels of difficulty.
 
         // todo list
-        //  fetch render textures for both the general view that renders everything
-        //  and the targeted view that only renders the player
+        // //  fetch render textures for both the general view that renders everything
+        // //  and the targeted view that only renders the player
 
-        //  on action, read both pixels from both textures
+        // //  on action, read both pixels from both textures
         //  create a buffer array for the player's texture as to store only initialized pixels (?)
         //  average both textures to a single big float
         //  compare both floats and decide of a camo threshold efficiency
 
-    }
 
 }
