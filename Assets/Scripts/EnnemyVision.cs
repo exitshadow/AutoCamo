@@ -8,6 +8,10 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
 
+    [SerializeField] [Range(.01f, .5f)] private float bound = .2f;
+    [SerializeField] [Range(.01f, .1f)] private float boundMargin = .05f;
+
+
     [SerializeField] private bool debug;
 
     private RenderTexture generalRender;
@@ -28,12 +32,21 @@ public class EnnemyVision : MonoBehaviour
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
         {
-            if(debug) Debug.Log("Target position is in ennemy's view");
+            // if(debug) Debug.Log("Target position is in ennemy's view");
+            if (Input.GetKeyDown(KeyCode.LeftAlt))
+            {
+                Vector2 origin;
+                Vector2 destination;
+
+                CalculateTargetBounds(bound, boundMargin, out origin, out destination);
+                ReadVision(origin, destination);
+
+            }
         }
     }
 
-    private void CalculateTargetBounds( int bound,
-                                        int boundmargin,
+    private void CalculateTargetBounds( float bound,
+                                        float boundmargin,
                                         out Vector2 origin,
                                         out Vector2 destination)
     {
@@ -50,35 +63,88 @@ public class EnnemyVision : MonoBehaviour
         destination = new Vector2(maxX, maxY);
     }
 
-    private void ReadVision(Vector2 from, Vector2 to)
+    private void ReadVision(Vector2 origin, Vector2 destination)
     {
-        int boundBoxWidth = (int)(to.x - from.x) * generalRender.width;
-        int boundBoxHeight = (int)(to.y - from.y) * generalRender.height;
+        // int boundBoxWidth = (int)(destination.x - origin.x) * generalRender.width;
+        // int boundBoxHeight = (int)(destination.y - origin.y) * generalRender.height;
 
-        int originX = (int)(from.x * generalRender.width);
-        int originY = (int)(from.y * generalRender.height);
+        // int originX = (int)(origin.x * generalRender.width);
+        // int originY = (int)(origin.y * generalRender.height);
 
-        int destX = (int)(to.x * generalRender.width);
-        int destY = (int)(to.y * generalRender.height);
+        // int destX = (int)(destination.x * generalRender.width);
+        // int destY = (int)(destination.y * generalRender.height);
 
-        generalRenderTex = new Texture2D(   boundBoxWidth,
-                                            boundBoxHeight,
+        // generalRenderTex = new Texture2D(   boundBoxWidth,
+        //                                     boundBoxHeight,
+        //                                     TextureFormat.RGB24,
+        //                                     true);
+        
+        // targetRenderTex = new Texture2D(    boundBoxWidth,
+        //                                     boundBoxHeight,
+        //                                     TextureFormat.RGB24,
+        //                                     true);
+        
+        // Rect cropSource = new Rect (originX, originY, destX, destY);
+
+        // Graphics.SetRenderTarget(generalRender);
+        // generalRenderTex.ReadPixels(cropSource, 0, 0);
+
+        // Graphics.SetRenderTarget(targetRender);
+        // targetRenderTex.ReadPixels(cropSource, 0, 0);
+
+        generalRenderTex = new Texture2D(   generalRender.width,
+                                            generalRender.height,
                                             TextureFormat.RGB24,
                                             true);
         
-        targetRenderTex = new Texture2D(    boundBoxWidth,
-                                            boundBoxHeight,
+        targetRenderTex = new Texture2D(    targetRender.width,
+                                            targetRender.height,
                                             TextureFormat.RGB24,
                                             true);
         
-        Rect cropSource = new Rect (originX, originY, destX, destY);
+        Rect cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
 
         Graphics.SetRenderTarget(generalRender);
         generalRenderTex.ReadPixels(cropSource, 0, 0);
 
         Graphics.SetRenderTarget(targetRender);
         targetRenderTex.ReadPixels(cropSource, 0, 0);
-        
+
+
+
+        Color[] generalPixels = generalRenderTex.GetPixels();
+        Color[] targetPixels = targetRenderTex.GetPixels();
+
+        int generalPixelsCount = 0;
+        int targetPixelsCount = 0;
+
+        float generalPixelsValue = 0;
+        float targetPixelsValue = 0;
+
+        for (int i = 0; i < generalPixels.Length; i++)
+        {
+            if (targetPixels[i] != new Color(0,0,0,1))
+            {
+                targetPixelsCount++;
+                targetPixelsValue += targetPixels[i].r + targetPixels[i].g + targetPixels[i].b;
+            }
+
+            generalPixelsCount++;
+            generalPixelsValue += generalPixels[i].r + generalPixels[i].g + generalPixels[i].b;
+        }
+
+        float averageTarget = targetPixelsValue / targetPixelsCount;
+        float averageGeneral = generalPixelsValue / generalPixelsCount;
+
+        if (debug)
+        {
+            Debug.Log(targetPixelsCount);
+            Debug.Log(generalPixelsCount);
+            Debug.Log(averageTarget);
+            Debug.Log(averageGeneral);
+
+        }
+
     }
 
         // TODO
