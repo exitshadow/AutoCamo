@@ -8,6 +8,8 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
 
+    [SerializeField] private bool debug;
+
     private RenderTexture generalRender;
     private Texture2D generalRenderTex;
     private RenderTexture targetRender;
@@ -25,7 +27,7 @@ public class EnnemyVision : MonoBehaviour
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
         {
-            Debug.Log("Target position is in ennemy's view");
+            if(debug) Debug.Log("Target position is in ennemy's view");
         }
     }
 

@@ -60,14 +60,22 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _ColorTransition: 0
+    - _EmissionStrength: 1
+    - _EmissionTransition: 0
     - _QueueControl: 0
     - _QueueOffset: 0
     m_Colors:
-    - _Color01: {r: 0.3018868, g: 0.2004984, b: 0.2004984, a: 0}
-    - _Color02: {r: 0.41509432, g: 0.41509432, b: 0.41509432, a: 0}
-    - _Color03: {r: 0.7924528, g: 0.723143, b: 0.63097185, a: 0}
-    - _Color04: {r: 0.51671416, g: 0.7264151, b: 0.60298675, a: 0}
+    - _Color01: {r: 1, g: 1, b: 1, a: 0}
+    - _Color02: {r: 1, g: 1, b: 1, a: 0}
+    - _Color03: {r: 1, g: 1, b: 1, a: 0}
+    - _Color04: {r: 1, g: 1, b: 1, a: 0}
     - _Color05: {r: 0.32405293, g: 0.6509434, b: 0.27880028, a: 0}
     - _Color06: {r: 0.7830189, g: 0.7490388, b: 0.7490388, a: 0}
+    - _FlashColor: {r: 1, g: 0.5021507, b: 0, a: 0}
     - _MainColor: {r: 1, g: 1, b: 1, a: 1}
+    - _OldColor01: {r: 1, g: 1, b: 1, a: 0}
+    - _OldColor02: {r: 1, g: 1, b: 1, a: 0}
+    - _OldColor03: {r: 1, g: 1, b: 1, a: 0}
+    - _OldColor04: {r: 1, g: 1, b: 1, a: 0}
   m_BuildTextureStacks: []
