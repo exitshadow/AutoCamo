@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class EnnemyVision : MonoBehaviour
 {
@@ -8,11 +9,15 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
 
-    [SerializeField] [Range(.01f, .5f)] private float bound = .2f;
-    [SerializeField] [Range(.01f, .1f)] private float boundMargin = .05f;
+    [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
+    [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
 
     [SerializeField] private bool debug;
+    [SerializeField] private bool useCompleteView;
+
+    [SerializeField] private RawImage previewGeneral;
+    [SerializeField] private RawImage previewTargeted;
 
     private RenderTexture generalRender;
     private RenderTexture targetRender;
@@ -35,82 +40,92 @@ public class EnnemyVision : MonoBehaviour
             // if(debug) Debug.Log("Target position is in ennemy's view");
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
-                Vector2 origin;
-                Vector2 destination;
-
-                CalculateTargetBounds(bound, boundMargin, out origin, out destination);
-                ReadVision(origin, destination);
-
+                ReadVision();
             }
         }
     }
 
-    private void CalculateTargetBounds( float bound,
-                                        float boundmargin,
-                                        out Vector2 origin,
-                                        out Vector2 destination)
+
+
+    private void ReadVision()
     {
-        float minX = viewTargetPos.x - bound - boundmargin;
-        float minY = viewTargetPos.y - bound - boundmargin;
-        if (minX < 0) minX = 0;
-        if (minY < 0) minY = 0;
-        origin = new Vector2(minX, minY);
+        if(useCompleteView)
+        {
+            generalRenderTex = new Texture2D(   generalRender.width,
+                                                generalRender.height,
+                                                TextureFormat.RGB24,
+                                                true);
+            
+            targetRenderTex = new Texture2D(    targetRender.width,
+                                                targetRender.height,
+                                                TextureFormat.RGB24,
+                                                true);
+            
+            Rect cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
 
-        float maxX = viewTargetPos.x + bound + boundmargin;
-        float maxY = viewTargetPos.y + bound + boundmargin;
-        if (maxX > 1) maxX = 1;
-        if (maxY > 1) maxY = 1;
-        destination = new Vector2(maxX, maxY);
-    }
+            RenderTexture.active = generalRender;
+            generalRenderTex.ReadPixels(cropSource, 0, 0);
 
-    private void ReadVision(Vector2 origin, Vector2 destination)
-    {
-        // int boundBoxWidth = (int)(destination.x - origin.x) * generalRender.width;
-        // int boundBoxHeight = (int)(destination.y - origin.y) * generalRender.height;
+            RenderTexture.active = targetRender;
+            targetRenderTex.ReadPixels(cropSource, 0, 0);
 
-        // int originX = (int)(origin.x * generalRender.width);
-        // int originY = (int)(origin.y * generalRender.height);
+            if(debug) Debug.Log($"bounds: none; origin: {cropSource.min}; destination: {cropSource.max}");
+            if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
+        }
+        else
+        {
+            // transform targetviewposition from 0 -> 1 coords to match render's coords
+            Vector2 center = new Vector2(   (viewTargetPos.x * generalRender.width),
+                                            (viewTargetPos.y * generalRender.height));
+            
+            if(debug) Debug.Log(center);
 
-        // int destX = (int)(destination.x * generalRender.width);
-        // int destY = (int)(destination.y * generalRender.height);
-
-        // generalRenderTex = new Texture2D(   boundBoxWidth,
-        //                                     boundBoxHeight,
-        //                                     TextureFormat.RGB24,
-        //                                     true);
-        
-        // targetRenderTex = new Texture2D(    boundBoxWidth,
-        //                                     boundBoxHeight,
-        //                                     TextureFormat.RGB24,
-        //                                     true);
-        
-        // Rect cropSource = new Rect (originX, originY, destX, destY);
-
-        // Graphics.SetRenderTarget(generalRender);
-        // generalRenderTex.ReadPixels(cropSource, 0, 0);
-
-        // Graphics.SetRenderTarget(targetRender);
-        // targetRenderTex.ReadPixels(cropSource, 0, 0);
-
-        generalRenderTex = new Texture2D(   generalRender.width,
-                                            generalRender.height,
-                                            TextureFormat.RGB24,
-                                            true);
-        
-        targetRenderTex = new Texture2D(    targetRender.width,
-                                            targetRender.height,
-                                            TextureFormat.RGB24,
-                                            true);
-        
-        Rect cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
-
-        Graphics.SetRenderTarget(generalRender);
-        generalRenderTex.ReadPixels(cropSource, 0, 0);
-
-        Graphics.SetRenderTarget(targetRender);
-        targetRenderTex.ReadPixels(cropSource, 0, 0);
+            int centerX = (int)center.x;
+            int centerY = (int)center.y;
+            if(debug) Debug.Log($"{centerX}, {centerY}");
+            // do the same for the target bounds
+            int targetTexBounds = (int)((bounds + boundsMargin) * generalRender.width);
 
 
+            // find origin and destination of crop rectangle inside of the enemy's fov
+            int originX = centerX - targetTexBounds;
+            int originY = centerY - targetTexBounds;
+            if (originX < 0) originX = 0;
+            if (originY < 0) originY = 0;
+            if (debug) Debug.Log($"{originX}, {originY}");
+
+            int destX = centerX + targetTexBounds;
+            int destY = centerX + targetTexBounds;
+            if (destX > generalRender.width) destX = generalRender.width;
+            if (destY > generalRender.height) destX = generalRender.height;
+
+            // create the two textures with the now adapted values
+            generalRenderTex = new Texture2D(   destX - originX,
+                                                destY - originY,
+                                                TextureFormat.RGB24,
+                                                true);
+
+            targetRenderTex = new Texture2D(    destX - originX,
+                                                destY - originY,
+                                                TextureFormat.RGB24,
+                                                true);
+
+            // build crop rectangle with correct coord values
+            Rect cropSource = new Rect(originX, originY, destX, destY);
+
+            // set render targets to correct sources and read their values
+            RenderTexture.active = generalRender;
+            generalRenderTex.ReadPixels(cropSource, 0,0);
+
+            RenderTexture.active = targetRender;
+            targetRenderTex.ReadPixels(cropSource, 0, 0);
+            
+            if(debug) Debug.Log($"bounds: {targetTexBounds}; origin: {originX}, {originY}; destination: {destX}, {destY}");
+            if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
+        }
+
+        if (debug) previewGeneral.texture = generalRenderTex;
+        if (debug) previewTargeted.texture = targetRenderTex;
 
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
@@ -138,10 +153,10 @@ public class EnnemyVision : MonoBehaviour
 
         if (debug)
         {
-            Debug.Log(targetPixelsCount);
-            Debug.Log(generalPixelsCount);
-            Debug.Log(averageTarget);
-            Debug.Log(averageGeneral);
+            Debug.Log($"targetPixelsCount: {targetPixelsCount}");
+            Debug.Log($"generalPixelsCount: {generalPixelsCount}");
+            Debug.Log($"averageTarget: {averageTarget}");
+            Debug.Log($"averageGeneral: {averageGeneral}");
 
         }
 
