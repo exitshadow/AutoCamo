@@ -12,7 +12,6 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
-
     [SerializeField] private bool debug;
     [SerializeField] private bool useCompleteView;
 
@@ -37,7 +36,7 @@ public class EnnemyVision : MonoBehaviour
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
         {
-            // if(debug) Debug.Log("Target position is in ennemy's view");
+            //if(debug) Debug.Log("Target position is in ennemy's view");
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
                 ReadVision();
@@ -49,8 +48,13 @@ public class EnnemyVision : MonoBehaviour
 
     private void ReadVision()
     {
+        Rect cropSource;
+        int targetTexBounds;
+
         if(useCompleteView)
         {
+            targetTexBounds = 0;
+
             generalRenderTex = new Texture2D(   generalRender.width,
                                                 generalRender.height,
                                                 TextureFormat.RGB24,
@@ -61,71 +65,76 @@ public class EnnemyVision : MonoBehaviour
                                                 TextureFormat.RGB24,
                                                 true);
             
-            Rect cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
-
-            RenderTexture.active = generalRender;
-            generalRenderTex.ReadPixels(cropSource, 0, 0);
-
-            RenderTexture.active = targetRender;
-            targetRenderTex.ReadPixels(cropSource, 0, 0);
-
-            if(debug) Debug.Log($"bounds: none; origin: {cropSource.min}; destination: {cropSource.max}");
-            if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
+            cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
         }
         else
         {
             // transform targetviewposition from 0 -> 1 coords to match render's coords
             Vector2 center = new Vector2(   (viewTargetPos.x * generalRender.width),
                                             (viewTargetPos.y * generalRender.height));
-            
-            if(debug) Debug.Log(center);
 
             int centerX = (int)center.x;
             int centerY = (int)center.y;
-            if(debug) Debug.Log($"{centerX}, {centerY}");
+            
             // do the same for the target bounds
-            int targetTexBounds = (int)((bounds + boundsMargin) * generalRender.width);
+            targetTexBounds = (int)((bounds + boundsMargin) * generalRender.width);
 
+            // as the current origin is top left, adapt y coords to make it from bottom left
+            centerY = generalRender.height - centerY;
+
+            if(debug) Debug.Log($"{viewTargetPos.x}, {viewTargetPos.y}");
+            if(debug) Debug.Log($"Center Positions: {centerX}, {centerY}");
 
             // find origin and destination of crop rectangle inside of the enemy's fov
+            // and clamp it to the render texture's bounds
             int originX = centerX - targetTexBounds;
             int originY = centerY - targetTexBounds;
             if (originX < 0) originX = 0;
             if (originY < 0) originY = 0;
-            if (debug) Debug.Log($"{originX}, {originY}");
 
             int destX = centerX + targetTexBounds;
             int destY = centerX + targetTexBounds;
             if (destX > generalRender.width) destX = generalRender.width;
-            if (destY > generalRender.height) destX = generalRender.height;
+            if (destY > generalRender.height) destY = generalRender.height;
+
+            if(debug) Debug.Log($"fed origins: {originX}, {originY}");
+            if(debug) Debug.Log($"fed destinations: {destX}, {destY}");
 
             // create the two textures with the now adapted values
-            generalRenderTex = new Texture2D(   destX - originX,
-                                                destY - originY,
+            generalRenderTex = new Texture2D(   2*targetTexBounds,
+                                                2*targetTexBounds,
                                                 TextureFormat.RGB24,
                                                 true);
 
-            targetRenderTex = new Texture2D(    destX - originX,
-                                                destY - originY,
+            targetRenderTex = new Texture2D(    2*targetTexBounds,
+                                                2*targetTexBounds,
                                                 TextureFormat.RGB24,
                                                 true);
 
             // build crop rectangle with correct coord values
-            Rect cropSource = new Rect(originX, originY, destX, destY);
+            // as the Rect() cnstr uses width and not dest as an argument
+            // we have to correct for it
+            cropSource = new Rect(  originX,
+                                    originY,
+                                    destX - originX,
+                                    destY - originY);
 
-            // set render targets to correct sources and read their values
-            RenderTexture.active = generalRender;
-            generalRenderTex.ReadPixels(cropSource, 0,0);
-
-            RenderTexture.active = targetRender;
-            targetRenderTex.ReadPixels(cropSource, 0, 0);
-            
-            if(debug) Debug.Log($"bounds: {targetTexBounds}; origin: {originX}, {originY}; destination: {destX}, {destY}");
-            if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
         }
 
-        if (debug) previewGeneral.texture = generalRenderTex;
-        if (debug) previewTargeted.texture = targetRenderTex;
+        // set render targets to correct sources and read their values
+        RenderTexture.active = generalRender;
+        generalRenderTex.ReadPixels(cropSource, 0, 0);
+        generalRenderTex.Apply();
+
+        RenderTexture.active = targetRender;
+        targetRenderTex.ReadPixels(cropSource, 0, 0);
+        targetRenderTex.Apply();
+        
+        if(debug) Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
+        if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
+
+        previewGeneral.texture = generalRenderTex;
+        previewTargeted.texture = targetRenderTex;
 
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
@@ -151,44 +160,23 @@ public class EnnemyVision : MonoBehaviour
         float averageTarget = targetPixelsValue / targetPixelsCount;
         float averageGeneral = generalPixelsValue / generalPixelsCount;
 
-        if (debug)
-        {
-            Debug.Log($"targetPixelsCount: {targetPixelsCount}");
-            Debug.Log($"generalPixelsCount: {generalPixelsCount}");
-            Debug.Log($"averageTarget: {averageTarget}");
-            Debug.Log($"averageGeneral: {averageGeneral}");
+        // if (debug)
+        // {
+        //     Debug.Log($"targetPixelsCount: {targetPixelsCount}");
+        //     Debug.Log($"generalPixelsCount: {generalPixelsCount}");
+        //     Debug.Log($"averageTarget: {averageTarget}");
+        //     Debug.Log($"averageGeneral: {averageGeneral}");
 
-        }
+        // }
 
     }
-
-        // TODO
-        // alternatively, as we do have the target position, we can draw a rectangle around
-        // it to grossly encompass the player's dimensions in ennemy's vision
-
-        // the quality of the camouflage is determined by adding all pixels values from
-        // this bounding rectangle and average it, then testing it against the averaged result
-        // of the texture currently output by the target's OpticCamo Shader.
-
-        // alternatively, we could also find the player sihouette and read this instead,
-        // against all the rest of the bounding rect. this should be more accurate.
-        // use the render layers?
-
-        // as these operations are rather expensive, they should happen only when the player is
-        // within the ennemy's field of view, not hidden by an object, and not in the Update()
-
-        // to determine if the player is hidden by an object, the ennemy's camera position is
-        // used as a source for regular random raycasts within the ennemy's vision, if it hits
-        // the player, it will start to read its vision for a camo check.
-
-        // this should be sufficient to emulate the accuracy of an enemy's vision and modulate
-        // levels of difficulty.
 
         // todo list
         // //  fetch render textures for both the general view that renders everything
         // //  and the targeted view that only renders the player
 
         // //  on action, read both pixels from both textures
+        //  adapt size of bounding box according to target's distance from camera
         //  create a buffer array for the player's texture as to store only initialized pixels (?)
         //  average both textures to a single big float
         //  compare both floats and decide of a camo threshold efficiency
