@@ -97,9 +97,13 @@ public class EnnemyVision : MonoBehaviour
             if (destX > generalRender.width) destX = generalRender.width;
             if (destY > generalRender.height) destY = generalRender.height;
 
-            if(debug) Debug.Log($"fed origins: {originX}, {originY}");
-            if(debug) Debug.Log($"fed destinations: {destX}, {destY}");
-            if(debug) Debug.Log($"adapted destinations: {destX - originX}, {destY - originY}");
+            if (debug)
+            {
+                Debug.Log($"fed origins: {originX}, {originY}");
+                Debug.Log($"fed destinations: {destX}, {destY}");
+                Debug.Log($"wrongly adapted destinations: {destX - originX}, {destY - originY}");
+                Debug.Log($"correct destinations: {destX - originX}, {destY + generalRender.height - originY}");
+            }   
 
             // create the two textures with the now adapted values
             generalRenderTex = new Texture2D(   2*targetTexBounds,
