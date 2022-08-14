@@ -5,6 +5,7 @@ using UnityEngine.UI;
 
 public class EnnemyVision : MonoBehaviour
 {
+    [Header("Vision and Tracking Settings")]
     [SerializeField] private Camera generalView;
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
@@ -12,12 +13,14 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
+    [Header("Debugging Tools")]
     [SerializeField] private bool debug;
+    [SerializeField] private bool verbose;
     [SerializeField] private bool useCompleteView;
-
-    [SerializeField] private RawImage previewGeneral;
-    [SerializeField] private RawImage previewTargeted;
-
+    [SerializeField] private Canvas debugUI;
+    [SerializeField] private RawImage previewBoxAllLayers;
+    [SerializeField] private RawImage previewBoxTargetLayer;
+    
     private RenderTexture generalRender;
     private RenderTexture targetRender;
     private Texture2D generalRenderTex;
@@ -32,6 +35,8 @@ public class EnnemyVision : MonoBehaviour
 
     private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.T)) ToggleDebugInterface();
+        
         viewTargetPos = generalView.WorldToViewportPoint(target.transform.position);
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
@@ -44,6 +49,10 @@ public class EnnemyVision : MonoBehaviour
         }
     }
 
+    private void ToggleDebugInterface()
+    {
+        debugUI.enabled = !debugUI.enabled;
+    }
 
 
     private void ReadVision()
@@ -138,8 +147,8 @@ public class EnnemyVision : MonoBehaviour
         if(debug) Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
         if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
 
-        previewGeneral.texture = generalRenderTex;
-        previewTargeted.texture = targetRenderTex;
+        previewBoxAllLayers.texture = generalRenderTex;
+        previewBoxTargetLayer.texture = targetRenderTex;
 
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
