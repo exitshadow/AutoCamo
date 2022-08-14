@@ -14,12 +14,13 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
     [Header("Debugging Tools")]
-    [SerializeField] private bool debug;
-    [SerializeField] private bool verbose;
-    [SerializeField] private bool useCompleteView;
+    private bool debug = true;
+    [SerializeField] private bool verbose = false;
+    [SerializeField] private bool useCompleteView = false;
     [SerializeField] private Canvas debugUI;
     [SerializeField] private RawImage previewBoxAllLayers;
     [SerializeField] private RawImage previewBoxTargetLayer;
+    [SerializeField] private RawImage previewAveragedVision;
     
     private RenderTexture generalRender;
     private RenderTexture targetRender;
@@ -31,12 +32,14 @@ public class EnnemyVision : MonoBehaviour
     {
         generalRender = generalView.targetTexture;
         targetRender = targetedView.targetTexture;
+        debug = true;
+        debugUI.enabled = true;
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.T)) ToggleDebugInterface();
-        
+        if (Input.GetKeyDown(KeyCode.T)) ToggleDebugMode();
+
         viewTargetPos = generalView.WorldToViewportPoint(target.transform.position);
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
@@ -45,13 +48,15 @@ public class EnnemyVision : MonoBehaviour
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
                 ReadVision();
+                RateCamoQuality();
             }
         }
     }
 
-    private void ToggleDebugInterface()
+    private void ToggleDebugMode()
     {
         debugUI.enabled = !debugUI.enabled;
+        debug = !debug;
     }
 
 
@@ -91,8 +96,11 @@ public class EnnemyVision : MonoBehaviour
             // as the current origin is top left, adapt y coords to make it from bottom left
             centerY = generalRender.height - centerY;
 
-            if(debug) Debug.Log($"{viewTargetPos.x}, {viewTargetPos.y}");
-            if(debug) Debug.Log($"Center Positions: {centerX}, {centerY}");
+            if (debug && verbose)
+            {
+                if(debug) Debug.Log($"{viewTargetPos.x}, {viewTargetPos.y}");
+                if(debug) Debug.Log($"Center Positions: {centerX}, {centerY}");
+            }
 
             // find origin and destination of crop rectangle inside of the enemy's fov
             // and clamp it to the render texture's bounds
@@ -106,12 +114,11 @@ public class EnnemyVision : MonoBehaviour
             if (destX > generalRender.width) destX = generalRender.width;
             if (destY > generalRender.height) destY = generalRender.height;
 
-            if (debug)
+            if (debug && verbose)
             {
-                Debug.Log($"fed origins: {originX}, {originY}");
-                Debug.Log($"fed destinations: {destX}, {destY}");
-                Debug.Log($"wrongly adapted destinations: {destX - originX}, {destY - originY}");
-                Debug.Log($"correct destinations: {destX - originX}, {destY + generalRender.height - originY}");
+                Debug.Log($"target origins: {originX}, {originY}");
+                Debug.Log($"target destinations: {destX}, {destY}");
+                Debug.Log($"fed destinations: {destX - originX}, {destY + generalRender.height - originY}");
             }   
 
             // create the two textures with the now adapted values
@@ -138,20 +145,30 @@ public class EnnemyVision : MonoBehaviour
         // set render targets to correct sources and read their values
         RenderTexture.active = generalRender;
         generalRenderTex.ReadPixels(cropSource, 0, 0);
-        generalRenderTex.Apply();
+        if (debug) generalRenderTex.Apply();
 
         RenderTexture.active = targetRender;
         targetRenderTex.ReadPixels(cropSource, 0, 0);
-        targetRenderTex.Apply();
-        
-        if(debug) Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
-        if(debug) Debug.Log($"cropped texture width: {generalRenderTex.width}");
+        if (debug) targetRenderTex.Apply();
 
-        previewBoxAllLayers.texture = generalRenderTex;
-        previewBoxTargetLayer.texture = targetRenderTex;
+        if (debug)
+        {
+            Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
+            Debug.Log($"cropped texture width: {generalRenderTex.width}");
+            previewBoxAllLayers.texture = generalRenderTex;
+            previewBoxTargetLayer.texture = targetRenderTex;
+        }
+    }
+
+    void RateCamoQuality() {
 
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
+        Color[] averagedPixels = new Color[generalPixels.Length];
+        Texture2D averagedTexture = new Texture2D(  generalRenderTex.width,
+                                                    generalRenderTex.height,
+                                                    TextureFormat.RGB24,
+                                                    true);
 
         int generalPixelsCount = 0;
         int targetPixelsCount = 0;
@@ -171,19 +188,44 @@ public class EnnemyVision : MonoBehaviour
             generalPixelsValue += generalPixels[i].r + generalPixels[i].g + generalPixels[i].b;
         }
 
-        float averageTarget = targetPixelsValue / targetPixelsCount;
-        float averageGeneral = generalPixelsValue / generalPixelsCount;
+        float averageTarget = targetPixelsValue / targetPixelsCount / 3;
+        float averageGeneral = generalPixelsValue / generalPixelsCount / 3;
 
-        // if (debug)
-        // {
-        //     Debug.Log($"targetPixelsCount: {targetPixelsCount}");
-        //     Debug.Log($"generalPixelsCount: {generalPixelsCount}");
-        //     Debug.Log($"averageTarget: {averageTarget}");
-        //     Debug.Log($"averageGeneral: {averageGeneral}");
+        if (debug)
+        {
+            // writes down all relevant information
+            Debug.Log($"targetPixelsCount: {targetPixelsCount}");
+            Debug.Log($"generalPixelsCount: {generalPixelsCount}");
+            Debug.Log($"averageTarget: {averageTarget}");
+            Debug.Log($"averageGeneral: {averageGeneral}");
 
-        // }
+            // creates a texture and assigns it to the visualization in debug UI
+            for (int mip = 0; mip < 3; mip++)
+            {
+                for (int i = 0; i < generalPixels.Length; i++)
+                {
+                    Color c;
+                    if (targetPixels[i] == new Color (0,0,0,1))
+                    {
+                        c = new Color(averageGeneral, averageGeneral, averageGeneral, 1);
+                    }
+                    else
+                    {
+                        c = new Color(averageTarget, averageTarget, averageTarget, 1);
 
+                    }
+                    averagedPixels[i] = c;
+                }
+                averagedTexture.SetPixels(averagedPixels, mip);
+            }
+            averagedTexture.Apply();
+            previewAveragedVision.texture = averagedTexture;
+        }
     }
+
+}
+
+
 
         // todo list
         // //  fetch render textures for both the general view that renders everything
@@ -196,4 +238,3 @@ public class EnnemyVision : MonoBehaviour
         //  compare both floats and decide of a camo threshold efficiency
 
 
-}
