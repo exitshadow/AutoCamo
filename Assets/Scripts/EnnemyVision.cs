@@ -99,6 +99,7 @@ public class EnnemyVision : MonoBehaviour
 
             if(debug) Debug.Log($"fed origins: {originX}, {originY}");
             if(debug) Debug.Log($"fed destinations: {destX}, {destY}");
+            if(debug) Debug.Log($"adapted destinations: {destX - originX}, {destY - originY}");
 
             // create the two textures with the now adapted values
             generalRenderTex = new Texture2D(   2*targetTexBounds,
@@ -117,7 +118,7 @@ public class EnnemyVision : MonoBehaviour
             cropSource = new Rect(  originX,
                                     originY,
                                     destX - originX,
-                                    destY - originY);
+                                    destY + generalRender.height - originY);
 
         }
 
