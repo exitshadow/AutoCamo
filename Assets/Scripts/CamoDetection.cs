@@ -2,17 +2,26 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
-public class EnnemyVision : MonoBehaviour
+public class CamoDetection : MonoBehaviour
 {
+    #region events
+    [Tooltip("Called every time the script calculates and rates the camouflage.")]
+    [SerializeField] private UnityEvent OnRefreshVision;
+    
+    [Tooltip("Called when the target doesn't pass the CamoTest")]
+    [SerializeField] private UnityEvent OnTargetDetected;
+    #endregion
+
     #region private fields
     private enum RatingMode {Luminance, HSV};
     private RenderTexture generalRender;
     private RenderTexture targetRender;
     private Texture2D generalRenderTex;
     private Texture2D targetRenderTex;
+    private Texture2D averagedTex;
     private Vector3 viewTargetPos;
-    private bool debug;
     #endregion
 
     #region inspected fields
@@ -21,10 +30,16 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
+    [Space]
+
     [Header("Debugging Settings")]
+    [Tooltip("Enables texture writing for visualization purposes, at the cost of performance.")]
+    [SerializeField] private bool enabledTextureWriting;
     [SerializeField] private bool verbose = false;
     [SerializeField] private bool useCompleteView = false;
     #endregion
+
+    [Space]
 
     #region dependency injections
     [Header("Dependency Injections / General [Compulsory]")]
@@ -32,6 +47,8 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
     [SerializeField] private TMPro.TextMeshProUGUI qualityRatingText;
+
+    [Space]
 
     [Header("Dependency Injections / Debugging Tools [Recommended]")]
     [SerializeField] private Canvas debugUI;
@@ -42,6 +59,11 @@ public class EnnemyVision : MonoBehaviour
 
     #region properties
     public float CamoDetectionValue { get; private set; }
+    public RenderTexture PreviewAllLayers { get {return generalRender; } }
+    public RenderTexture PreviewTargetLayer { get {return targetRender; } }
+    public Texture2D PreviewBoxAllLayers { get { return generalRenderTex; } }
+    public Texture2D PreviewBoxTargetLayer  { get { return targetRenderTex; } }
+    public Texture2D PreviewAveragedVision { get { return averagedTex; } }
     #endregion
     
     #region event methods
@@ -49,7 +71,7 @@ public class EnnemyVision : MonoBehaviour
     {
         generalRender = generalView.targetTexture;
         targetRender = targetedView.targetTexture;
-        debug = true;
+        enabledTextureWriting = true;
         debugUI.enabled = true;
         CamoDetectionValue = 0;
     }
@@ -62,7 +84,7 @@ public class EnnemyVision : MonoBehaviour
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
         {
-            //if(debug) Debug.Log("Target position is in ennemy's view");
+            if(verbose) Debug.Log("Target position is in ennemy's view");
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
                 ReadVision();
@@ -76,7 +98,7 @@ public class EnnemyVision : MonoBehaviour
     private void ToggleDebugMode()
     {
         debugUI.enabled = !debugUI.enabled;
-        debug = !debug;
+        enabledTextureWriting = !enabledTextureWriting;
     }
 
 
@@ -112,10 +134,10 @@ public class EnnemyVision : MonoBehaviour
             // as the current origin is top left, adapt y coords to make it from bottom left
             centerY = generalRender.height - centerY;
 
-            if (debug && verbose)
+            if (verbose)
             {
-                if(debug) Debug.Log($"{viewTargetPos.x}, {viewTargetPos.y}");
-                if(debug) Debug.Log($"Center Positions: {centerX}, {centerY}");
+                Debug.Log($"{viewTargetPos.x}, {viewTargetPos.y}");
+                Debug.Log($"Center Positions: {centerX}, {centerY}");
             }
 
             // find origin and destination of crop rectangle inside of the enemy's fov
@@ -136,7 +158,7 @@ public class EnnemyVision : MonoBehaviour
             texWidth =  2*targetTexBounds;
             texHeight = 2*targetTexBounds;
 
-            if (debug && verbose)
+            if (verbose)
             {
                 Debug.Log($"target origins: {originX}, {originY}");
                 Debug.Log($"target destinations: {destX}, {destY}");
@@ -166,17 +188,20 @@ public class EnnemyVision : MonoBehaviour
         // sets render targets to correct sources and passes their values
         RenderTexture.active = generalRender;
         generalRenderTex.ReadPixels(cropSource, 0, 0);
-        if (debug) generalRenderTex.Apply();
+        if (enabledTextureWriting) generalRenderTex.Apply();
 
         RenderTexture.active = targetRender;
         targetRenderTex.ReadPixels(cropSource, 0, 0);
-        if (debug) targetRenderTex.Apply();
+        if (enabledTextureWriting) targetRenderTex.Apply();
 
         // logs bunches of debugging data
-        if (debug && verbose)
+        if (verbose)
         {
             Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
             Debug.Log($"cropped texture width: {generalRenderTex.width}");
+        }
+        if (enabledTextureWriting)
+        {
             previewBoxAllLayers.texture = generalRenderTex;
             previewBoxTargetLayer.texture = targetRenderTex;
         }
@@ -200,7 +225,7 @@ public class EnnemyVision : MonoBehaviour
         if (ratingMode == RatingMode.Luminance) camoRating = RateBasedOnLuminance();
         else camoRating = RateBasedOnHSV();
 
-        if (debug) DisplayAveragedColors();
+        if (enabledTextureWriting) GenerateAveragedTexture();
 
         return camoRating;
         
@@ -308,7 +333,7 @@ public class EnnemyVision : MonoBehaviour
 
             camoRatingLum = Mathf.Abs(averageGeneralLum - averageTargetLum);
 
-            if (debug && verbose)
+            if (verbose)
             {
                 Debug.Log($"targetPixelsCount: {targetPixelsCount}");
                 Debug.Log($"generalPixelsCount: {generalPixelsCount}");
@@ -320,12 +345,12 @@ public class EnnemyVision : MonoBehaviour
         }
 
         // creates a texture and assigns it to the visualization in debug UI
-        void DisplayAveragedColors()
+        void GenerateAveragedTexture()
         {
-            Texture2D averagedTexture = new Texture2D(  generalRenderTex.width,
-                                                        generalRenderTex.height,
-                                                        TextureFormat.RGB24,
-                                                        true);
+            averagedTex = new Texture2D(    generalRenderTex.width,
+                                            generalRenderTex.height,
+                                            TextureFormat.RGB24,
+                                            true);
 
             for (int mip = 0; mip < 3; mip++)
             {
@@ -342,10 +367,10 @@ public class EnnemyVision : MonoBehaviour
                     }
                     averagedPixels[i] = c;
                 }
-                averagedTexture.SetPixels(averagedPixels, mip);
+                averagedTex.SetPixels(averagedPixels, mip);
             }
-            averagedTexture.Apply();
-            previewAveragedVision.texture = averagedTexture;
+            averagedTex.Apply();
+            previewAveragedVision.texture = averagedTex;
             
             // dispatches between different levels of quality
             if (camoRating < .1f) camoRatingText = "Excellent";
@@ -353,8 +378,8 @@ public class EnnemyVision : MonoBehaviour
             else if (camoRating < .3f) camoRatingText = "Mediocre";
             else camoRatingText = "Poor";
             qualityRatingText.text = camoRatingText;
-            
-            if (debug && verbose) Debug.Log(camoRating + " " + camoRatingText);
+
+            if (verbose) Debug.Log(camoRating + " " + camoRatingText);
         }
         #endregion
     }
