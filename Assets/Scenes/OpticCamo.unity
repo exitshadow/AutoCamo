@@ -457,6 +457,7 @@ MonoBehaviour:
   generalView: {fileID: 423297848}
   targetedView: {fileID: 1027933483}
   target: {fileID: 1817062421}
+  ratingMode: 1
   bounds: 0.1
   boundsMargin: 0.05
   qualityRatingText: {fileID: 648710470}

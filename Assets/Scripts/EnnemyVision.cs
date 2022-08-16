@@ -5,10 +5,21 @@ using UnityEngine.UI;
 
 public class EnnemyVision : MonoBehaviour
 {
+    #region private fields
+    private RenderTexture generalRender;
+    private RenderTexture targetRender;
+    private Texture2D generalRenderTex;
+    private Texture2D targetRenderTex;
+    private Vector3 viewTargetPos;
+    private enum RatingMode {Luminance, HSV};
+    #endregion
+
+    #region private dependency injections and settings
     [Header("Vision and Tracking Settings")]
     [SerializeField] private Camera generalView;
     [SerializeField] private Camera targetedView;
     [SerializeField] private GameObject target;
+    [SerializeField] RatingMode ratingMode;
 
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
@@ -23,19 +34,18 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] private RawImage previewBoxAllLayers;
     [SerializeField] private RawImage previewBoxTargetLayer;
     [SerializeField] private RawImage previewAveragedVision;
-    
-    private RenderTexture generalRender;
-    private RenderTexture targetRender;
-    private Texture2D generalRenderTex;
-    private Texture2D targetRenderTex;
-    private Vector3 viewTargetPos;
+    #endregion
 
+    public float CamoDetectionValue { get; private set; }
+    
+    #region event methods
     private void Start()
     {
         generalRender = generalView.targetTexture;
         targetRender = targetedView.targetTexture;
         debug = true;
         debugUI.enabled = true;
+        CamoDetectionValue = 0;
     }
 
     private void Update()
@@ -50,11 +60,13 @@ public class EnnemyVision : MonoBehaviour
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
                 ReadVision();
-                RateCamoQuality();
+                CamoDetectionValue = RateCamoQuality();
             }
         }
     }
+    #endregion
 
+    #region private methods
     private void ToggleDebugMode()
     {
         debugUI.enabled = !debugUI.enabled;
@@ -162,7 +174,7 @@ public class EnnemyVision : MonoBehaviour
         }
     }
 
-    void RateCamoQuality() {
+    private float RateCamoQuality() {
 
         float camoRating;
         string camoRatingText;
@@ -170,48 +182,131 @@ public class EnnemyVision : MonoBehaviour
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
         Color[] averagedPixels = new Color[generalPixels.Length];
-        Texture2D averagedTexture = new Texture2D(  generalRenderTex.width,
-                                                    generalRenderTex.height,
-                                                    TextureFormat.RGB24,
-                                                    true);
 
         int generalPixelsCount = 0;
         int targetPixelsCount = 0;
 
-        float generalPixelsValue = 0;
-        float targetPixelsValue = 0;
+        Color averageGeneral;
+        Color averageTarget;
 
-        // averages colors to greyscale with luminance weights
-        for (int i = 0; i < generalPixels.Length; i++)
+        if (ratingMode == RatingMode.Luminance) camoRating = RateBasedOnLuminance();
+        else camoRating = RateBasedOnHSV();
+
+        if (debug) DisplayAveragedColors();
+
+        return camoRating;
+        
+
+        #region local functions
+        float RateBasedOnHSV()
         {
-            if (targetPixels[i] != new Color(0,0,0,1))
+            float camoRatingHSV = 0;
+
+            float generalPixelsHue = 0;
+            float generalPixelsSaturation = 0;
+            float generalPixelsValue = 0;
+
+            float targetPixelsHue = 0;
+            float targetPixelsSaturation = 0;
+            float targetPixelsValue = 0;
+
+            for (int i = 0; i < generalPixels.Length; i++)
             {
-                targetPixelsCount++;
-                targetPixelsValue   += 0.299f * targetPixels[i].r
-                                    + 0.587f * targetPixels[i].g
-                                    + 0.114f * targetPixels[i].b;
+                // accumulates values for the background + target
+                float gH, gS, gV;
+
+                generalPixelsCount++;
+
+                Color.RGBToHSV(generalPixels[i], out gH, out gS, out gV);
+                generalPixelsHue += gH;
+                generalPixelsSaturation += gS;
+                generalPixelsValue += gV;
+
+                // accumulates values for the target only
+                if (targetPixels[i] != new Color(0,0,0,1))
+                {
+                    float tH, tS, tV;
+
+                    targetPixelsCount++;
+
+                    Color.RGBToHSV(targetPixels[i], out tH, out tS, out tV);
+                    targetPixelsHue += tH;
+                    targetPixelsSaturation += tS;
+                    targetPixelsValue += tV;
+                }
             }
 
-            generalPixelsCount++;
-            generalPixelsValue  += 0.299f * generalPixels[i].r
-                                + 0.587f * generalPixels[i].g
-                                + 0.114f * generalPixels[i].b;
+            // averages the accumulated values by the number of pixels
+            generalPixelsHue /= generalPixelsCount;
+            generalPixelsSaturation /= generalPixelsCount;
+            generalPixelsValue /= generalPixelsCount;
+
+            targetPixelsHue /= targetPixelsCount;
+            targetPixelsSaturation /= targetPixelsCount;
+            targetPixelsValue /= targetPixelsCount;
+
+            // casts the colors and assigns them to the preview colors
+            averageGeneral = Color.HSVToRGB(generalPixelsHue, generalPixelsSaturation, generalPixelsValue);
+            averageTarget = Color.HSVToRGB(targetPixelsHue, targetPixelsSaturation, targetPixelsValue);
+        
+            float camoRatingH = Mathf.Abs(generalPixelsHue - targetPixelsHue);
+            float camoRatingS = Mathf.Abs(generalPixelsSaturation - targetPixelsSaturation);
+            float camoRatingV = Mathf.Abs(generalPixelsValue - targetPixelsValue);
+
+            return camoRatingHSV;
         }
 
-        float averageTarget = targetPixelsValue / targetPixelsCount;
-        float averageGeneral = generalPixelsValue / generalPixelsCount;
-
-        camoRating = Mathf.Abs(averageGeneral - averageTarget);
-
-        if (debug)
+        // averages colors to greyscale with luminance weights
+        float RateBasedOnLuminance()
         {
-            // writes down all relevant information
-            Debug.Log($"targetPixelsCount: {targetPixelsCount}");
-            Debug.Log($"generalPixelsCount: {generalPixelsCount}");
-            Debug.Log($"averageTarget: {averageTarget}");
-            Debug.Log($"averageGeneral: {averageGeneral}");
+            float camoRatingLum = 0;
 
-            // creates a texture and assigns it to the visualization in debug UI
+            float generalPixelsAverageLum = 0;
+            float targetPixelsAverageLum = 0;
+
+            for (int i = 0; i < generalPixels.Length; i++)
+            {
+                if (targetPixels[i] != new Color(0,0,0,1))
+                {
+                    targetPixelsCount++;
+                    targetPixelsAverageLum     += 0.299f * targetPixels[i].r
+                                                + 0.587f * targetPixels[i].g
+                                                + 0.114f * targetPixels[i].b;
+                }
+
+                generalPixelsCount++;
+                generalPixelsAverageLum    += 0.299f * generalPixels[i].r
+                                            + 0.587f * generalPixels[i].g
+                                            + 0.114f * generalPixels[i].b;
+            }
+
+            float averageTargetLum = targetPixelsAverageLum / targetPixelsCount;
+            float averageGeneralLum = generalPixelsAverageLum / generalPixelsCount;
+
+            averageGeneral = new Color(averageGeneralLum, averageGeneralLum, averageGeneralLum, 1);
+            averageTarget = new Color(averageTargetLum, averageTargetLum, averageTargetLum, 1);
+
+            camoRatingLum = Mathf.Abs(averageGeneralLum - averageTargetLum);
+
+            if (debug && verbose)
+            {
+                Debug.Log($"targetPixelsCount: {targetPixelsCount}");
+                Debug.Log($"generalPixelsCount: {generalPixelsCount}");
+                Debug.Log($"averageTarget: {averageTargetLum}");
+                Debug.Log($"averageGeneral: {averageGeneralLum}");
+            }
+
+            return camoRatingLum;
+        }
+
+        // creates a texture and assigns it to the visualization in debug UI
+        void DisplayAveragedColors()
+        {
+            Texture2D averagedTexture = new Texture2D(  generalRenderTex.width,
+                                                        generalRenderTex.height,
+                                                        TextureFormat.RGB24,
+                                                        true);
+
             for (int mip = 0; mip < 3; mip++)
             {
                 for (int i = 0; i < generalPixels.Length; i++)
@@ -219,12 +314,11 @@ public class EnnemyVision : MonoBehaviour
                     Color c;
                     if (targetPixels[i] == new Color (0,0,0,1))
                     {
-                        c = new Color(averageGeneral, averageGeneral, averageGeneral, 1);
+                        c = averageGeneral;
                     }
                     else
                     {
-                        c = new Color(averageTarget, averageTarget, averageTarget, 1);
-
+                        c = averageTarget;
                     }
                     averagedPixels[i] = c;
                 }
@@ -232,18 +326,21 @@ public class EnnemyVision : MonoBehaviour
             }
             averagedTexture.Apply();
             previewAveragedVision.texture = averagedTexture;
+            
+            // dispatches between different levels of quality
+            if (camoRating < .1f) camoRatingText = "Excellent";
+            else if (camoRating < .2f) camoRatingText = "Good";
+            else if (camoRating < .3f) camoRatingText = "Mediocre";
+            else camoRatingText = "Poor";
+            qualityRatingText.text = camoRatingText;
+            Debug.Log(camoRating + " " + camoRatingText);
         }
-
-        // dispatches between different levels of quality
-        if (camoRating < .1f) camoRatingText = "Excellent";
-        else if (camoRating < .2f) camoRatingText = "Good";
-        else if (camoRating < .3f) camoRatingText = "Mediocre";
-        else camoRatingText = "Poor";
-        qualityRatingText.text = camoRatingText;
-        Debug.Log(camoRating + " " + camoRatingText);
+        #endregion
     }
+    #endregion
 
 }
+
 
 // TODO
 // analysis from RGB and simple luminance to HSV values
