@@ -6,59 +6,56 @@ using UnityEngine.Events;
 
 public class CamoDetection : MonoBehaviour
 {
-    #region events
-    [Tooltip("Called every time the script calculates and rates the camouflage.")]
-    [SerializeField] private UnityEvent OnRefreshVision;
-    
-    [Tooltip("Called when the target doesn't pass the CamoTest")]
-    [SerializeField] private UnityEvent OnTargetDetected;
-    #endregion
 
     #region private fields
-    private enum RatingMode {Luminance, HSV};
-    private RenderTexture generalRender;
-    private RenderTexture targetRender;
-    private Texture2D generalRenderTex;
-    private Texture2D targetRenderTex;
-    private Texture2D averagedTex;
-    private Vector3 viewTargetPos;
+    enum RatingMode {Luminance, HSV};
+    RenderTexture generalRender;
+    RenderTexture targetRender;
+    Texture2D generalRenderTex;
+    Texture2D targetRenderTex;
+    Texture2D averagedTex;
+    Vector3 viewTargetPos;
     #endregion
 
     #region inspected fields
-    [Header("Vision and Tracking Settings")]
+
+    [Header("Events")]
+    [SerializeField] UnityEvent OnRefreshVision;
+    [SerializeField] UnityEvent OnTargetDetected;
+
+    [Space]
+
+    [Header("Settings")]
+    [SerializeField] [Range(.01f, .9f)] float sensitivityThreshold = .3f;
     [SerializeField] RatingMode ratingMode;
-    [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
-    [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
+    [SerializeField] [Range(.01f, .5f)] float bounds = .2f;
+    [SerializeField] [Range(.01f, .05f)] float boundsMargin = .05f;
+
+    [Space]
+
+    #region dependency injections
+    [Header("Dependency Injections [Compulsory]")]
+    [SerializeField] Camera generalView;
+    [SerializeField] Camera targetedView;
+    [SerializeField] GameObject target;
+    #endregion
 
     [Space]
 
     [Header("Debugging Settings")]
     [Tooltip("Enables texture writing for visualization purposes, at the cost of performance.")]
-    [SerializeField] private bool enabledTextureWriting;
-    [SerializeField] private bool verbose = false;
-    [SerializeField] private bool useCompleteView = false;
+    [SerializeField] bool enabledTextureWriting;
+    [SerializeField] bool eventLogs = true;
+    [SerializeField] bool verbose = false;
+    [SerializeField] bool useCompleteView = false;
+
     #endregion
 
-    [Space]
 
-    #region dependency injections
-    [Header("Dependency Injections / General [Compulsory]")]
-    [SerializeField] private Camera generalView;
-    [SerializeField] private Camera targetedView;
-    [SerializeField] private GameObject target;
-    [SerializeField] private TMPro.TextMeshProUGUI qualityRatingText;
-
-    [Space]
-
-    [Header("Dependency Injections / Debugging Tools [Recommended]")]
-    [SerializeField] private Canvas debugUI;
-    [SerializeField] private RawImage previewBoxAllLayers;
-    [SerializeField] private RawImage previewBoxTargetLayer;
-    [SerializeField] private RawImage previewAveragedVision;
-    #endregion
 
     #region properties
     public float CamoDetectionValue { get; private set; }
+    public float SensitivityThreshold { get {return sensitivityThreshold; } }
     public RenderTexture PreviewAllLayers { get {return generalRender; } }
     public RenderTexture PreviewTargetLayer { get {return targetRender; } }
     public Texture2D PreviewBoxAllLayers { get { return generalRenderTex; } }
@@ -72,14 +69,11 @@ public class CamoDetection : MonoBehaviour
         generalRender = generalView.targetTexture;
         targetRender = targetedView.targetTexture;
         enabledTextureWriting = true;
-        debugUI.enabled = true;
         CamoDetectionValue = 0;
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.T)) ToggleDebugMode();
-
         viewTargetPos = generalView.WorldToViewportPoint(target.transform.position);
         if(     viewTargetPos.x > 0 && viewTargetPos.x < 1
             &&  viewTargetPos.y > 0 && viewTargetPos.y < 1  )
@@ -87,20 +81,24 @@ public class CamoDetection : MonoBehaviour
             if(verbose) Debug.Log("Target position is in ennemy's view");
             if (Input.GetKeyDown(KeyCode.LeftAlt))
             {
+                if (eventLogs) Debug.Log("Vision Refreshed");
                 ReadVision();
                 CamoDetectionValue = RateCamoQuality();
+                OnRefreshVision.Invoke();
+
+                if (CamoDetectionValue >= sensitivityThreshold)
+                {
+                    if (eventLogs) Debug.Log("Target detected!");
+                    OnTargetDetected.Invoke();
+                }
+
             }
+
         }
     }
     #endregion
 
     #region private methods
-    private void ToggleDebugMode()
-    {
-        debugUI.enabled = !debugUI.enabled;
-        enabledTextureWriting = !enabledTextureWriting;
-    }
-
 
     private void ReadVision()
     {
@@ -199,11 +197,6 @@ public class CamoDetection : MonoBehaviour
         {
             Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
             Debug.Log($"cropped texture width: {generalRenderTex.width}");
-        }
-        if (enabledTextureWriting)
-        {
-            previewBoxAllLayers.texture = generalRenderTex;
-            previewBoxTargetLayer.texture = targetRenderTex;
         }
     }
 
@@ -370,14 +363,12 @@ public class CamoDetection : MonoBehaviour
                 averagedTex.SetPixels(averagedPixels, mip);
             }
             averagedTex.Apply();
-            previewAveragedVision.texture = averagedTex;
             
             // dispatches between different levels of quality
             if (camoRating < .1f) camoRatingText = "Excellent";
             else if (camoRating < .2f) camoRatingText = "Good";
             else if (camoRating < .3f) camoRatingText = "Mediocre";
             else camoRatingText = "Poor";
-            qualityRatingText.text = camoRatingText;
 
             if (verbose) Debug.Log(camoRating + " " + camoRatingText);
         }
