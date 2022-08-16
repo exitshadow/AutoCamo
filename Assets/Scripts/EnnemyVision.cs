@@ -6,37 +6,43 @@ using UnityEngine.UI;
 public class EnnemyVision : MonoBehaviour
 {
     #region private fields
+    private enum RatingMode {Luminance, HSV};
     private RenderTexture generalRender;
     private RenderTexture targetRender;
     private Texture2D generalRenderTex;
     private Texture2D targetRenderTex;
     private Vector3 viewTargetPos;
-    private enum RatingMode {Luminance, HSV};
+    private bool debug;
     #endregion
 
-    #region private dependency injections and settings
+    #region inspected fields
     [Header("Vision and Tracking Settings")]
-    [SerializeField] private Camera generalView;
-    [SerializeField] private Camera targetedView;
-    [SerializeField] private GameObject target;
     [SerializeField] RatingMode ratingMode;
-
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
-    [SerializeField] private TMPro.TextMeshProUGUI qualityRatingText;
-
-    [Header("Debugging Tools")]
-    private bool debug = true;
+    [Header("Debugging Settings")]
     [SerializeField] private bool verbose = false;
     [SerializeField] private bool useCompleteView = false;
+    #endregion
+
+    #region dependency injections
+    [Header("Dependency Injections / General [Compulsory]")]
+    [SerializeField] private Camera generalView;
+    [SerializeField] private Camera targetedView;
+    [SerializeField] private GameObject target;
+    [SerializeField] private TMPro.TextMeshProUGUI qualityRatingText;
+
+    [Header("Dependency Injections / Debugging Tools [Recommended]")]
     [SerializeField] private Canvas debugUI;
     [SerializeField] private RawImage previewBoxAllLayers;
     [SerializeField] private RawImage previewBoxTargetLayer;
     [SerializeField] private RawImage previewAveragedVision;
     #endregion
 
+    #region properties
     public float CamoDetectionValue { get; private set; }
+    #endregion
     
     #region event methods
     private void Start()
@@ -212,15 +218,18 @@ public class EnnemyVision : MonoBehaviour
 
             for (int i = 0; i < generalPixels.Length; i++)
             {
-                // accumulates values for the background + target
-                float gH, gS, gV;
+                // accumulates values for the background minus target
+                if (generalPixels[i] != targetPixels[i])
+                {
+                    float gH, gS, gV;
 
-                generalPixelsCount++;
+                    generalPixelsCount++;
 
-                Color.RGBToHSV(generalPixels[i], out gH, out gS, out gV);
-                generalPixelsHue += gH;
-                generalPixelsSaturation += gS;
-                generalPixelsValue += gV;
+                    Color.RGBToHSV(generalPixels[i], out gH, out gS, out gV);
+                    generalPixelsHue += gH;
+                    generalPixelsSaturation += gS;
+                    generalPixelsValue += gV;
+                }
 
                 // accumulates values for the target only
                 if (targetPixels[i] != new Color(0,0,0,1))
@@ -246,12 +255,21 @@ public class EnnemyVision : MonoBehaviour
             targetPixelsValue /= targetPixelsCount;
 
             // casts the colors and assigns them to the preview colors
-            averageGeneral = Color.HSVToRGB(generalPixelsHue, generalPixelsSaturation, generalPixelsValue);
-            averageTarget = Color.HSVToRGB(targetPixelsHue, targetPixelsSaturation, targetPixelsValue);
-        
+            averageGeneral = Color.HSVToRGB(generalPixelsHue,
+                                            generalPixelsSaturation,
+                                            generalPixelsValue);
+
+            averageTarget = Color.HSVToRGB( targetPixelsHue,
+                                            targetPixelsSaturation,
+                                            targetPixelsValue);
+
+            // assigns ratings to the difference between background and target averages
             float camoRatingH = Mathf.Abs(generalPixelsHue - targetPixelsHue);
             float camoRatingS = Mathf.Abs(generalPixelsSaturation - targetPixelsSaturation);
             float camoRatingV = Mathf.Abs(generalPixelsValue - targetPixelsValue);
+
+            // simple rating based on HSV averages
+            camoRatingHSV = (camoRatingH + camoRatingS + camoRatingV) / 3;
 
             return camoRatingHSV;
         }
@@ -343,7 +361,7 @@ public class EnnemyVision : MonoBehaviour
 
 
 // TODO
-// analysis from RGB and simple luminance to HSV values
+// // analysis from RGB and simple luminance to HSV values
 // deciding which thresholds are pertinent for each HSV channel
 // refactor code afterwards to separate controls and underlying logic
 // refactor to separate coordinates adaptation logic, textures grabbing and camo rating
