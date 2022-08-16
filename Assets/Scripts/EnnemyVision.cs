@@ -84,22 +84,18 @@ public class EnnemyVision : MonoBehaviour
     {
         Rect cropSource;
         int targetTexBounds;
+        int texWidth, texHeight;
+        int originX = 0;
+        int originY = 0;
+        int cropSourceWidth, croupsourceHeight;
 
         if(useCompleteView)
         {
             targetTexBounds = 0;
-
-            generalRenderTex = new Texture2D(   generalRender.width,
-                                                generalRender.height,
-                                                TextureFormat.RGB24,
-                                                true);
-            
-            targetRenderTex = new Texture2D(    targetRender.width,
-                                                targetRender.height,
-                                                TextureFormat.RGB24,
-                                                true);
-            
-            cropSource = new Rect (0, 0, targetRender.width, targetRender.height);
+            texWidth = generalRender.width;
+            texHeight = generalRenderTex.height;
+            cropSourceWidth = targetRender.width;
+            croupsourceHeight = targetRender.height;
         }
         else
         {
@@ -124,8 +120,8 @@ public class EnnemyVision : MonoBehaviour
 
             // find origin and destination of crop rectangle inside of the enemy's fov
             // and clamp it to the render texture's bounds
-            int originX = centerX - targetTexBounds;
-            int originY = centerY - targetTexBounds;
+            originX = centerX - targetTexBounds;
+            originY = centerY - targetTexBounds;
             if (originX < 0) originX = 0;
             if (originY < 0) originY = 0;
 
@@ -134,35 +130,40 @@ public class EnnemyVision : MonoBehaviour
             if (destX > generalRender.width) destX = generalRender.width;
             if (destY > generalRender.height) destY = generalRender.height;
 
+            cropSourceWidth = destX - originX;
+            croupsourceHeight = destY + generalRender.height - originY;
+
+            texWidth =  2*targetTexBounds;
+            texHeight = 2*targetTexBounds;
+
             if (debug && verbose)
             {
                 Debug.Log($"target origins: {originX}, {originY}");
                 Debug.Log($"target destinations: {destX}, {destY}");
                 Debug.Log($"fed destinations: {destX - originX}, {destY + generalRender.height - originY}");
             }   
-
-            // create the two textures with the now adapted values
-            generalRenderTex = new Texture2D(   2*targetTexBounds,
-                                                2*targetTexBounds,
-                                                TextureFormat.RGB24,
-                                                true);
-
-            targetRenderTex = new Texture2D(    2*targetTexBounds,
-                                                2*targetTexBounds,
-                                                TextureFormat.RGB24,
-                                                true);
-
-            // build crop rectangle with correct coord values
-            // as the Rect() cnstr uses width and not dest as an argument
-            // we have to correct for it
-            cropSource = new Rect(  originX,
-                                    originY,
-                                    destX - originX,
-                                    destY + generalRender.height - originY);
-
         }
 
-        // set render targets to correct sources and read their values
+        // create the two textures with the now adapted values
+        generalRenderTex = new Texture2D(   texWidth,
+                                            texHeight,
+                                            TextureFormat.RGB24,
+                                            true);
+
+        targetRenderTex = new Texture2D(    texWidth,
+                                            texHeight,
+                                            TextureFormat.RGB24,
+                                            true);
+        
+        // creates the crop rectangle inside of the view
+        // from which it is going to pass data to the two
+        // new textures just created
+        cropSource = new Rect(  originX,
+                                originY,
+                                cropSourceWidth,
+                                croupsourceHeight);
+        
+        // sets render targets to correct sources and passes their values
         RenderTexture.active = generalRender;
         generalRenderTex.ReadPixels(cropSource, 0, 0);
         if (debug) generalRenderTex.Apply();
@@ -171,7 +172,8 @@ public class EnnemyVision : MonoBehaviour
         targetRenderTex.ReadPixels(cropSource, 0, 0);
         if (debug) targetRenderTex.Apply();
 
-        if (debug)
+        // logs bunches of debugging data
+        if (debug && verbose)
         {
             Debug.Log($"bounds: {targetTexBounds}; origin: {cropSource.min}; destination: {cropSource.max}");
             Debug.Log($"cropped texture width: {generalRenderTex.width}");
@@ -351,7 +353,8 @@ public class EnnemyVision : MonoBehaviour
             else if (camoRating < .3f) camoRatingText = "Mediocre";
             else camoRatingText = "Poor";
             qualityRatingText.text = camoRatingText;
-            Debug.Log(camoRating + " " + camoRatingText);
+            
+            if (debug && verbose) Debug.Log(camoRating + " " + camoRatingText);
         }
         #endregion
     }
