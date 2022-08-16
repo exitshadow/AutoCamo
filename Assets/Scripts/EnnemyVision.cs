@@ -13,6 +13,8 @@ public class EnnemyVision : MonoBehaviour
     [SerializeField] [Range(.01f, .5f)] private float bounds = .2f;
     [SerializeField] [Range(.01f, .05f)] private float boundsMargin = .05f;
 
+    [SerializeField] private TMPro.TextMeshProUGUI qualityRatingText;
+
     [Header("Debugging Tools")]
     private bool debug = true;
     [SerializeField] private bool verbose = false;
@@ -162,6 +164,9 @@ public class EnnemyVision : MonoBehaviour
 
     void RateCamoQuality() {
 
+        float camoRating;
+        string camoRatingText;
+
         Color[] generalPixels = generalRenderTex.GetPixels();
         Color[] targetPixels = targetRenderTex.GetPixels();
         Color[] averagedPixels = new Color[generalPixels.Length];
@@ -176,20 +181,27 @@ public class EnnemyVision : MonoBehaviour
         float generalPixelsValue = 0;
         float targetPixelsValue = 0;
 
+        // averages colors to greyscale with luminance weights
         for (int i = 0; i < generalPixels.Length; i++)
         {
             if (targetPixels[i] != new Color(0,0,0,1))
             {
                 targetPixelsCount++;
-                targetPixelsValue += targetPixels[i].r + targetPixels[i].g + targetPixels[i].b;
+                targetPixelsValue   += 0.299f * targetPixels[i].r
+                                    + 0.587f * targetPixels[i].g
+                                    + 0.114f * targetPixels[i].b;
             }
 
             generalPixelsCount++;
-            generalPixelsValue += generalPixels[i].r + generalPixels[i].g + generalPixels[i].b;
+            generalPixelsValue  += 0.299f * generalPixels[i].r
+                                + 0.587f * generalPixels[i].g
+                                + 0.114f * generalPixels[i].b;
         }
 
-        float averageTarget = targetPixelsValue / targetPixelsCount / 3;
-        float averageGeneral = generalPixelsValue / generalPixelsCount / 3;
+        float averageTarget = targetPixelsValue / targetPixelsCount;
+        float averageGeneral = generalPixelsValue / generalPixelsCount;
+
+        camoRating = Mathf.Abs(averageGeneral - averageTarget);
 
         if (debug)
         {
@@ -221,20 +233,22 @@ public class EnnemyVision : MonoBehaviour
             averagedTexture.Apply();
             previewAveragedVision.texture = averagedTexture;
         }
+
+        // dispatches between different levels of quality
+        if (camoRating < .1f) camoRatingText = "Excellent";
+        else if (camoRating < .2f) camoRatingText = "Good";
+        else if (camoRating < .3f) camoRatingText = "Mediocre";
+        else camoRatingText = "Poor";
+        qualityRatingText.text = camoRatingText;
+        Debug.Log(camoRating + " " + camoRatingText);
     }
 
 }
 
-
-
-        // todo list
-        // //  fetch render textures for both the general view that renders everything
-        // //  and the targeted view that only renders the player
-
-        // //  on action, read both pixels from both textures
-        //  adapt size of bounding box according to target's distance from camera
-        //  create a buffer array for the player's texture as to store only initialized pixels (?)
-        //  average both textures to a single big float
-        //  compare both floats and decide of a camo threshold efficiency
+// TODO
+// analysis from RGB and simple luminance to HSV values
+// deciding which thresholds are pertinent for each HSV channel
+// refactor code afterwards to separate controls and underlying logic
+// refactor to separate coordinates adaptation logic, textures grabbing and camo rating
 
 
